@@ -10,9 +10,10 @@ from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
 from scipy.stats import ks_2samp
 
+SAVE_FIGS = True
 out_path = Path("../talks/docs/slides/croissants/images/")
 
-responses = pd.read_csv("data/responses.csv")
+responses = pd.read_csv("lamination-evaluation/data/responses.csv")
 
 responses["name"] = responses["name"].str.capitalize().str.strip()
 responses["vote"] = responses["vote"].str.title()
@@ -50,7 +51,8 @@ sns.heatmap(
 )
 ax.set(ylabel="Name", xlabel="Week", title="Votes by week")
 
-plt.savefig("../talks/docs/slides/croissants/images/votemap.svg")
+if SAVE_FIGS:
+    plt.savefig("../talks/docs/slides/croissants/images/votemap.svg")
 
 # %%
 
@@ -58,67 +60,6 @@ frequent_attendees = attendance[attendance > 5].index
 
 # %%
 responses_wide = responses_wide.loc[frequent_attendees]
-
-# %%
-# compute pairwise overlap scores between attendees
-
-
-def compute_agreements(responses_wide):
-    agreements = np.ones((len(responses_wide), len(responses_wide)))
-    for i, name1 in enumerate(responses_wide.index):
-        for j, name2 in enumerate(responses_wide.index):
-            if i < j:
-                responses1 = responses_wide.loc[name1].dropna()
-                responses2 = responses_wide.loc[name2].dropna()
-                index_intersection = responses1.index.intersection(responses2.index)
-                responses1 = responses1.loc[index_intersection]
-                responses2 = responses2.loc[index_intersection]
-                aggrement = (responses1 == responses2).mean()
-                if pd.isna(aggrement):
-                    aggrement = 0.0
-                agreements[i, j] = aggrement
-                agreements[j, i] = aggrement
-
-    agreements = pd.DataFrame(
-        agreements, index=responses_wide.index, columns=responses_wide.index
-    )
-
-    return agreements
-
-
-agreements = compute_agreements(responses_wide)
-# %%
-besties = agreements.idxmax(axis=1)
-for name, bestie in besties.items():
-    agreement = agreements.loc[name, bestie]
-    print(f"{name}'s bestie is {bestie} (agreement {agreement:.2f})")
-
-# %%
-
-
-method = "average"
-links = linkage(squareform(1 - agreements), method=method)
-cgrid = sns.clustermap(
-    agreements,
-    cmap="Reds",
-    row_linkage=links,
-    col_linkage=links,
-    cbar_pos=(0.02, 0.85, 0.05, 0.13),
-)
-cgrid.ax_heatmap.set(xlabel="", ylabel="")
-cgrid.ax_cbar.set(ylabel="Agreement")
-plt.savefig(out_path / "agreements.svg")
-cgrid.ax_heatmap.set(xticks=[], yticks=[])
-plt.savefig("../talks/docs/slides/croissants/images/agreements_no_labels.svg")
-
-# %%
-
-classical_mds = ClassicalMDS(n_components=2, dissimilarity="precomputed")
-embedding = classical_mds.fit_transform(1 - agreements.values)
-
-sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1], palette="tab20")
-for i, name in enumerate(agreements.index):
-    plt.text(embedding[i, 0], embedding[i, 1], name)
 
 # %%
 tallies = responses.groupby(["week", "vote"]).size().rename("vote_count")
@@ -138,6 +79,75 @@ was_correct[responses_wide.isna()] = np.nan
 was_correct.mean(axis=1).sort_values(ascending=False)
 
 # %%
+# compute pairwise overlap scores between attendees
+
+
+def compute_agreements(responses_wide):
+    agreements = np.ones((len(responses_wide), len(responses_wide)))
+    for i, name1 in enumerate(responses_wide.index):
+        for j, name2 in enumerate(responses_wide.index):
+            if i < j:
+                responses1 = responses_wide.loc[name1].dropna()
+                responses2 = responses_wide.loc[name2].dropna()
+                # select weeks both were there
+                index_intersection = responses1.index.intersection(responses2.index)
+                responses1 = responses1.loc[index_intersection]
+                responses2 = responses2.loc[index_intersection]
+                agreement = (responses1 == responses2).mean()
+                if pd.isna(agreement):
+                    agreement = 0.0
+                agreements[i, j] = agreement
+                agreements[j, i] = agreement
+
+    agreements = pd.DataFrame(
+        agreements, index=responses_wide.index, columns=responses_wide.index
+    )
+
+    return agreements
+
+
+agreements = compute_agreements(responses_wide)
+disagreements = 1 - agreements
+# %%
+agreements_w_others = agreements.copy()
+agreements_w_others -= np.eye(len(agreements_w_others))
+besties = agreements_w_others.idxmax(axis=1)
+for name, bestie in besties.items():
+    agreement = agreements_w_others.loc[name, bestie]
+    print(f"{name}'s bestie is {bestie} (agreement {agreement:.2f})")
+
+# %%
+
+method = "average"
+links = linkage(squareform(disagreements), method=method)
+cgrid = sns.clustermap(
+    agreements,
+    cmap="Reds",
+    row_linkage=links,
+    col_linkage=links,
+    cbar_pos=(0.02, 0.85, 0.05, 0.13),
+)
+cgrid.ax_heatmap.set(xlabel="", ylabel="")
+cgrid.ax_cbar.set(ylabel="Agreement")
+plt.savefig(out_path / "agreements.svg")
+cgrid.ax_heatmap.set(xticks=[], yticks=[])
+
+if SAVE_FIGS:
+    plt.savefig("../talks/docs/slides/croissants/images/agreements_no_labels.svg")
+
+# %%
+
+classical_mds = ClassicalMDS(n_components=2, dissimilarity="precomputed")
+embedding = classical_mds.fit_transform(disagreements.values)
+
+fig, ax = plt.subplots(figsize=(8, 8))
+sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1])
+for i, name in enumerate(agreements.index):
+    plt.text(embedding[i, 0], embedding[i, 1], name)
+ax.set(xlabel="MDS 1", ylabel="MDS 2", xticks=[], yticks=[])
+ax.spines[['top', 'right']].set_visible(False)
+
+# %%
 
 
 def randomize_votes(responses_wide):
@@ -155,9 +165,6 @@ def randomize_votes(responses_wide):
     return null_responses
 
 
-# %%
-
-
 indices = np.triu_indices_from(agreements, k=1)
 
 method = "complete"
@@ -169,7 +176,7 @@ for i in range(1000):
     null_agreements.index.name = ""
     null_agreements.columns.name = ""
     if i < 10:
-        links = linkage(squareform(1 - null_agreements), method=method)
+        links = linkage(squareform(disagreements), method=method)
         sns.clustermap(
             null_agreements,
             cmap="Reds",
@@ -182,7 +189,6 @@ for i in range(1000):
         plt.savefig(f"../talks/docs/slides/croissants/images/null_{i}.svg")
 
     vals.extend(null_agreements.values[indices])
-
 
 # %%
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -197,8 +203,9 @@ sns.histplot(
 ax.legend()
 ax.spines[["top", "right", "left"]].set_visible(False)
 ax.set(xlabel="Agreement", ylabel="", yticks=[])
-plt.savefig("../talks/docs/slides/croissants/images/agreement_histogram.svg")
 
-# %%
+print(ks_2samp(agreements.values[indices], vals))
 
-ks_2samp(agreements.values[indices], vals)
+if SAVE_FIGS:
+    plt.savefig("../talks/docs/slides/croissants/images/agreement_histogram.svg")
+
