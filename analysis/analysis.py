@@ -52,7 +52,7 @@ sns.heatmap(
 ax.set(ylabel="Name", xlabel="Week", title="Votes by week")
 
 if SAVE_FIGS:
-    plt.savefig("../talks/docs/slides/croissants/images/votemap.svg")
+    plt.savefig(out_path / "votemap.svg")
 
 # %%
 
@@ -133,7 +133,7 @@ plt.savefig(out_path / "agreements.svg")
 cgrid.ax_heatmap.set(xticks=[], yticks=[])
 
 if SAVE_FIGS:
-    plt.savefig("../talks/docs/slides/croissants/images/agreements_no_labels.svg")
+    plt.savefig(out_path / "agreements_no_labels.svg")
 
 # %%
 
@@ -145,7 +145,10 @@ sns.scatterplot(x=embedding[:, 0], y=embedding[:, 1])
 for i, name in enumerate(agreements.index):
     plt.text(embedding[i, 0], embedding[i, 1], name)
 ax.set(xlabel="MDS 1", ylabel="MDS 2", xticks=[], yticks=[])
-ax.spines[['top', 'right']].set_visible(False)
+ax.spines[["top", "right"]].set_visible(False)
+
+if SAVE_FIGS:
+    plt.savefig(out_path / "mds.svg")
 
 # %%
 
@@ -167,7 +170,7 @@ def randomize_votes(responses_wide):
 
 indices = np.triu_indices_from(agreements, k=1)
 
-method = "complete"
+method = "average"
 
 vals = []
 for i in range(1000):
@@ -186,7 +189,7 @@ for i in range(1000):
             yticklabels=False,
         )
 
-        plt.savefig(f"../talks/docs/slides/croissants/images/null_{i}.svg")
+        plt.savefig(out_path / "null_{i}.svg")
 
     vals.extend(null_agreements.values[indices])
 
@@ -207,5 +210,5 @@ ax.set(xlabel="Agreement", ylabel="", yticks=[])
 print(ks_2samp(agreements.values[indices], vals))
 
 if SAVE_FIGS:
-    plt.savefig("../talks/docs/slides/croissants/images/agreement_histogram.svg")
+    plt.savefig(out_path / "agreement_histogram.svg")
 
